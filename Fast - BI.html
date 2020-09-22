@@ -1,0 +1,1734 @@
+<!DOCTYPE html>
+<html>
+<script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.6.9/angular.min.js"></script>
+<script src="https://underscorejs.org/underscore-min.js"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.0/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/forge/0.8.2/forge.all.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9-1/crypto-js.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9-1/hmac-sha256.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/3.1.9-1/enc-base64.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery-toast-plugin/1.3.2/jquery.toast.min.js"
+	integrity="sha256-56zsTlMwzGRtLC4t51alLh5cKYvi0hnbhEXQTVU/zZQ=" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/jquery-toast-plugin/1.3.2/jquery.toast.min.css"
+	integrity="sha256-WolrNTZ9lY0QL5f0/Qi1yw3RGnDLig2HVLYkrshm7Y0=" crossorigin="anonymous" />
+
+<body>
+
+	<div ng-app="myApp" ng-controller="myCtrl">
+		<span id="message"></span>
+		{{textNum}}
+		<p ng-if="lastBMUpdate > 2 || lastBKUpdate > 2"
+			style="font-size: xx-large;background-color: red;color: chartreuse;">
+			BM: {{lastBMUpdate}} sec ago
+			BK: {{lastBKUpdate}} sec ago
+		</p>
+
+		<table>
+			<tr>
+				<td>
+					<table class="table-3">
+						<tr>
+							<th>
+								<button ng-click="connectLiveOrderBook()">LIVE</button>
+							</th>
+							<th id='secondCell'>
+
+							</th>
+							<th id="myId" ng-repeat="to in data" style="font-size:x-large;" ng-hide="to.hide"
+								ng-class="{'selected': to == input.to}">
+								<span style="display: block; font-size:30px; font-family: monospace;"
+									ng-style="{'color': to.color}">
+									<div id="{{'to-' + to.nameBM}}name">{{to.nameBM}}</div>
+								</span>
+								<span
+									style="color:lightgreen; font-size: 15px;">{{profitGrid['T-' + to.nameBM].B | number: to.precisionBM}}</span>
+								<div id="{{'to-' + to.nameBM}}"><span
+										style="color:red; font-size: 15px;">{{profitGrid['T-' + to.nameBM].S | number: to.precisionBK}}</span>
+								</div>
+							</th>
+							<th ng-if="input.showtrades">Messages</th>
+						</tr>
+						<tr ng-repeat="from in data">
+							<th>
+								<span ng-style="{'color': from.color}">
+									<div style="font-size:30px;" id="{{'from-' + from.nameBM}}name">{{from.nameBM}}
+									</div>
+								</span>
+							</th>
+							<th style="font-size:x-large;" ng-hide="from.hide"
+								ng-class="{'selected': from == input.from}">
+
+								<div id="{{'from-' + from.nameBM}}">
+									<span
+										style="color:lightgreen;">{{profitGrid['F-' + from.nameBM].B | number: from.precisionBK}}</span>
+								</div>
+								<span
+									style="color:red">{{profitGrid['F-' + from.nameBM].S | number: from.precisionBM}}</span>
+							</th>
+							<td style="width:7.13%;"
+								ng-click="input.matrixItem = profitGrid[from.nameBM + '_' + to.nameBM]; input.from = from; input.to = to; matrixSelect()"
+								ng-style="{'border-left': (profitGrid[from.nameBM + '_' + to.nameBM].rate > 1 ? '10px solid ' + from.color : ''), 'border-top': ( profitGrid[from.nameBM + '_' + to.nameBM].rate > 1 ? '10px solid ' + to.color : '' ) }"
+								ng-hide="from.hide || to.hide" ng-repeat="to in data"
+								ng-class="{'closed': (from.closed || to.closed),
+					'selected' : (input.from == from && input.to == to),
+					'profit': (profitGrid[from.nameBM + '_' + to.nameBM].rate > 1 && profitGrid[from.nameBM + '_' + to.nameBM].rate < 2 && (!from.closed && !to.closed)) }">
+								<span ng-if="from.socketClosed || to.socketClosed"
+									style="color:red;background-color:blueviolet;">CLOSED</span>
+								<span style="font-size: 30px;"
+									ng-if='(profitGrid[from.nameBM + "_" + to.nameBM].rate > 1) && profitGrid[from.nameBM + "_" + to.nameBM].rate < 2'>
+									<span>{{ 10000 * (profitGrid[from.nameBM + "_" + to.nameBM].rate - 1) | number: 0}}/{{profitGrid[from.nameBM + "_" + to.nameBM].totalProfit.totalProfit | number: 0}}
+									</span>
+								</span>
+							</td>
+							<td ng-if="input.showtrades">
+								<div id="{{'msg-' + from.nameBM}}"
+									style="width: 400px;height: 200px;font-family: monospace;overflow-x: auto;font-size: 25px;">
+								</div>
+							</td>
+						</tr>
+					</table>
+				</td>
+				<td rowspan="2">
+					<table class="table-3" style="font: normal 45px Arial, sans-serif">
+						<tr ng-repeat="from in fromSort track by $index"
+							style="background: linear-gradient(to left,#00350d 1%, #005213 {{(from.upValue/500000)*100 > 100 ? 100 : (from.upValue/500000)*100}}%, black 0%);">
+							<td ng-click="BuySideClick(from)" ng-style="{ 'color' : from.color }"
+								ng-class="{'profitside': from.rate < toSort[0].rate }" ng-hide="input.bigscreen">
+								{{from.B | number: from.precisionBK }}
+							</td>
+							<td ng-click="BuySideClick(from)" ng-style="{ 'color' : from.color }"
+								ng-class="{'profitside': from.rate < toSort[0].rate }" ng-hide="input.bigscreen">
+								{{(from.btcBidPrice ? from.btcBidPrice : from.S) | number: from.precisionBM}}<span
+									style="font-size:xx-large;">{{from.name}}</span>
+							</td>
+							<td ng-click="BuySideClick(from)" ng-class="{'profitside': from.rate < toSort[0].rate }"
+								ng-style="{ 'font': input.bigscreen ? 'normal 70px Arial, sans-serif': '', 'font-family' : 'monospace'}">
+								<span ng-if="from.socketClosed"
+									style="color:red;background-color:blueviolet;">CLOSED</span>
+								<span
+									style="color:{{from.color}};font-size:xx-large;">{{from.rateW | number: 3}}</span><span
+									ng-style="{ 'color' : from.color }">{{from.rate | number: 3}}</span>
+							</td>
+						</tr>
+					</table>
+				</td>
+				<td rowspan="2">
+					<table class="table-3" style="font: normal 45px Arial, sans-serif">
+						<tr ng-repeat="from in fromSort track by $index"
+							style="background: linear-gradient(to right, #380000 1%, #530000 {{(toSort[$index].upValue/500000)*100 > 100 ? 100 : (toSort[$index].upValue/500000)*100}}%, black 0%);">
+							<td ng-click="SellSideClick(toSort[$index])"
+								ng-class="{'profitside': toSort[$index].rate > fromSort[0].rate }"
+								ng-style="{ 'font': input.bigscreen ? 'normal 70px Arial, sans-serif': '', 'font-family' : 'monospace'}">
+								<span ng-if="toSort[$index].socketClosed"
+									style="color:red;background-color:blueviolet;">CLOSED</span>
+								<span ng-style="{ 'color' : toSort[$index].color }">
+									{{toSort[$index].rate | number:3}}</span><span
+									style="color:{{toSort[$index].color}};font-size:xx-large;">{{toSort[$index].rateW | number: 3}}</span>
+							</td>
+							<td ng-click="SellSideClick(toSort[$index])" ng-style="{ 'color' : toSort[$index].color }"
+								ng-class="{'profitside': toSort[$index].rate > fromSort[0].rate }"
+								ng-hide="input.bigscreen">
+								{{(toSort[$index].btcAskPrice ? toSort[$index].btcAskPrice : toSort[$index].B) | number: toSort[$index].precisionBM}}<span
+									style="font-size:xx-large;">{{toSort[$index].name}}</span>
+							</td>
+							<td ng-click="SellSideClick(toSort[$index])" ng-style="{ 'color' : toSort[$index].color }"
+								ng-class="{'profitside': toSort[$index].rate > fromSort[0].rate }"
+								ng-hide="input.bigscreen">
+								{{toSort[$index].S | number: toSort[$index].precisionBK}}
+							</td>
+						</tr>
+					</table>
+				</td>
+				<td>
+					<table class="table-3">
+						<tr>
+							<td>
+								<div id="all-trades"
+									style="width: 500px;height: 1600px;font-family: monospace;overflow-x: auto;font-size: 30px;">
+								</div>
+							</td>
+						</tr>
+					</table>
+				</td>
+
+			</tr>
+		</table>
+		<div style="font-size: x-large;">
+			<span>Show Order Rate: <input class="confirm-checkbox" type="checkbox" ng-model="input.showOrderRate" />
+				Confirm: <input class="confirm-checkbox" type="checkbox" ng-model="input.noPrompt" />
+				Off Beep: <input class="confirm-checkbox" type="checkbox" ng-model="input.offbeep" />
+				<button style="width:300px;font-size: 40px;" ng-click="GetBalance()">Balance</button>
+			</span>
+		</div>
+		<table style="font-size: 50px;">
+			<tr>
+				<td style="width:250px;">
+					<!-- Buy Side asks -->
+					<div style="overflow-y: scroll; height:350px;" id="scroll-to-bottom1">
+						<table class="table-orderbook" style="border-bottom: 7px red solid;">
+							<tr ng-repeat="ask in input.from.asksBK.slice().reverse() track by $index"
+								style="color:#f4c1c1; background: linear-gradient(to left, #620000 {{(ask[1]/input.from.asksMax)*100}}%, black 0%);"
+								ng-click="BuyDepthClick(input.from.asksBK, input.from.asksBK.length - $index - 1)">
+								<td style="color:lightgreen;" ng-show="input.showOrderRate">
+									<span>{{(ask[0] / input.from.bidsBM[0][0]) * (1 + fee) | number: 2}}</span>
+								</td>
+								<td style="color:red;" ng-show="input.showOrderRate">
+									<span> {{(ask[0] / input.from.asksBM[0][0]) * (1 - fee) | number: 2}}</span>
+								</td>
+								<td style="text-align: right; width: 100px;color:{{input.from.color}};">
+									{{ask[1] | number: input.from.coinPrecision}}
+								</td>
+								<td style="text-align: right; width: 100px;">
+									{{ask[0] | number: input.from.precisionBK}}
+								</td>
+								<td style="background-color: {{ask[3]? 'gold': ''}};">
+									.
+								</td>
+								<!-- <td style="text-align: right; width: 10px;color:white"
+									ng-style="{'background-color' : (ask[3] ? 'red':'') }">
+									{{input.from.asksBK.length - $index}}</td> -->
+							</tr>
+						</table>
+					</div>
+
+				</td>
+				<td style="width:450px;">
+					<!-- Buy Side Trade -->
+					<table>
+						<tr class="trade-coin-balance">
+							<td colspan="2" style="color:{{input.from.color}}">
+								{{Balance[input.from.nameBK.toUpperCase()].available | number:input.from.coinPrecision}}
+								{{input.from.nameBM}}
+
+							</td>
+						</tr>
+						<tr class="trade-coin-balance">
+							<td colspan="2">
+								<a href="" style="color:yellowgreen"
+									ng-click="buy.thb = Balance['THB'].available; buy.volume = buy.thb / buy.price / 1.0025;">{{Balance["THB"].available | number: 2}}
+									THB </a>
+							</td>
+						</tr>
+						<tr>
+							<td>
+								<label for="b-thb">THB: </label>
+
+							</td>
+							<td>
+								<input name="b-thb" style="width:100%" ng-model="buy.thb" type="number"
+									ng-change="buy.volume = buy.thb / buy.price / 1.0025"></input>
+							</td>
+						</tr>
+						<tr>
+							<td>
+								PRICE:
+							</td>
+							<td>
+								<input style="width:100%" ng-model="buy.price" type="number"
+									ng-change="buy.volume = buy.thb / buy.price / 1.0025"></input>
+							</td>
+						</tr>
+						<tr>
+							<td>
+								{{input.from.nameBM}}:
+							</td>
+							<td>
+								<input style="width:100%" ng-model="buy.volume"
+									ng-change="buy.thb = buy.volume * buy.price * 1.0025" type="number"></input>
+							</td>
+						</tr>
+						<tr>
+							<td>
+								<input class="confirm-checkbox" type="checkbox" ng-model="input.noPrompt" />
+							</td>
+							<td>
+								<button style="width: 100%; background-color: #4CAF50;"
+									ng-click="BuyOrder(input.from)">BUY {{input.from.nameBM}}</button>
+							</td>
+						</tr>
+					</table>
+
+				</td>
+				<td style="width:250px;">
+					<!-- Sell Side asks -->
+					<div style="overflow-y: scroll; height:350px;" id="scroll-to-bottom2">
+						<table class="table-orderbook" style="border-bottom: 7px red solid;">
+							<tr ng-repeat="ask in input.to.asksBK.slice().reverse() track by $index"
+								style="color:#f4c1c1; background: linear-gradient(to left, #620000 {{(ask[1]/input.to.asksMax)*100}}%, black 0%);">
+								<td style="color:lightgreen;" ng-show="input.showOrderRate">
+									<span>{{(ask[0] / input.to.bidsBM[0][0]) * (1 + fee) | number: 2}}</span>
+								</td>
+								<td style="color:red;" ng-show="input.showOrderRate">
+									<span> {{(ask[0] / input.to.asksBM[0][0]) * (1 - fee) | number: 2}}</span>
+								</td>
+								<td style="text-align: right; width: 100px;color:{{input.to.color}}">
+									{{ask[1] | number: input.to.coinPrecision}}
+								</td>
+								<td style="text-align: right; width: 100px;">
+									{{ask[0] | number: input.to.precisionBK}}
+								</td>
+								<td style="background-color: {{ask[3]? 'gold': ''}};">
+									.
+								</td>
+								<!-- <td style="text-align: right; width: 10px;color:white"
+									ng-style="{'background-color' : (ask[3] ? 'red':'') }">
+									{{input.from.asksBK.length - $index}}</td> -->
+							</tr>
+						</table>
+					</div>
+				</td>
+				<td style="width:450px;">
+					<!-- Sell Side Trade -->
+					<table>
+						<tr class="trade-coin-balance">
+							<td colspan="2">
+								<a href="" style="color:{{input.to.color}}"
+									ng-click="sell.volume = Balance[input.to.nameBK.toUpperCase()].available; sell.thb = sell.volume * sell.price * 0.9975;">{{Balance[input.to.nameBK.toUpperCase()].available | number:input.to.coinPrecision}}
+									{{input.to.nameBM}}</a>
+
+							</td>
+						</tr>
+						<tr class="trade-coin-balance">
+							<td colspan="2" style="color:yellowgreen">
+								{{Balance["THB"].available| number:2}} THB
+							</td>
+						</tr>
+						<tr>
+							<td>
+								{{input.to.nameBM}}:
+							</td>
+							<td>
+								<input style="width:100%" ng-model="sell.volume"
+									ng-change="sell.thb = sell.volume * sell.price * 0.9975;" type="number"></input>
+							</td>
+						</tr>
+						<tr>
+							<td>
+								PRICE:
+							</td>
+							<td>
+								<input style="width:100%" ng-model="sell.price" type="number"
+									ng-change="sell.thb = sell.volume * sell.price * 0.9975;"></input>
+							</td>
+						</tr>
+						<tr>
+							<td>
+								THB:
+							</td>
+							<td>
+								<input style="width:100%" ng-model="sell.thb" type="number"
+									ng-change="sell.volume = sell.thb / sell.price / 1.0025"></input>
+							</td>
+						</tr>
+						<tr>
+							<td>
+								<input class="confirm-checkbox" type="checkbox" ng-model="input.noPrompt" />
+							</td>
+							<td>
+								<button style="width: 100%; background-color: red;" ng-click="SellOrder(input.to)">SELL
+									{{input.to.nameBM}}</button>
+							</td>
+						</tr>
+					</table>
+
+				</td>
+
+				<td rowspan="2">
+					<span ng-if="input.to">
+						<table class="table-3" style="font-size: xx-large!important;"
+							ng-show="profitGrid[input.from.nameBM + '_' + input.to.nameBM].totalProfit.profitLevel.length > 0">
+							<tr>
+								<th>Buy C Rate</th>
+								<th>Profit Rate</th>
+								<th>Profit</th>
+								<th>Total Profit</th>
+								<th>Amount</th>
+								<th>Total Amount</th>
+								<th>Sell C Rate</th>
+							</tr>
+							<tr ng-repeat="pl in profitGrid[input.from.nameBM + '_' + input.to.nameBM].totalProfit.profitLevel"
+								ng-click="buy.price = pl.Brate; buy.thb = pl.totalAmount * 0.995; buy.volume = (pl.totalAmount*0.995)/pl.Brate; sell.price = pl.Srate; sell.thb = pl.totalAmount * 0.9975; sell.volume = pl.totalAmount/pl.Srate">
+								<td style="color:lightgreen;">{{pl.Bcrate | number: 3}} ({{pl.Brate}})</td>
+								<td style="color:greenyellow;">{{pl.pRate | number: 0}}</td>
+								<td style="color:turquoise">{{pl.orderProfit | number:0}}</td>
+								<td style="color:lightseagreen;">{{pl.totalProfit | number:0}}</td>
+								<td style="color:goldenrod;">{{pl.amount | number:0}}</td>
+								<td style="color:yellow;">{{pl.totalAmount | number:0}}</td>
+								<td style="color:red;">{{pl.Scrate | number: 3}} ({{pl.Srate}})</td>
+							</tr>
+						</table>
+					</span>
+				</td>
+			</tr>
+			<tr>
+				<td>
+					<!-- Buy Side Bids -->
+					<div style="overflow-y: scroll; height:350px;">
+						<table class="table-orderbook" style="border-top: 7px lightgreen solid;">
+							<tr ng-repeat="bid in input.from.bidsBK.slice() track by $index" ng-style="{  }"
+								style="color:#c9f8cb; background: linear-gradient(to left, #1d7221 {{(bid[1]/input.from.bidsMax)*100}}%, black 0%);">
+								<td style="color:lightgreen;" ng-show="input.showOrderRate">
+									<span>{{(bid[0] / input.from.bidsBM[0][0]) * (1 + fee) | number: 2}}</span>
+								</td>
+								<td style="color:red;" ng-show="input.showOrderRate">
+									<span> {{(bid[0] / input.from.asksBM[0][0]) * (1 - fee) | number: 2}}</span>
+								</td>
+								<td style="text-align: right; width: 100px;color:{{input.from.color}}">
+									{{bid[1] | number: input.from.coinPrecision}}
+								</td>
+								<td style="text-align: right; width: 100px;">
+									{{bid[0] | number: input.from.precisionBK}}
+								</td>
+								<td style="background-color: {{bid[3]? 'gold': ''}};">
+									.
+								</td>
+								<!-- <td style="text-align: right; width: 10px;color:white"
+									ng-style="{'background-color' : (bid[3] ? 'lightgreen':'') }">{{1 + $index}}</td> -->
+							</tr>
+						</table>
+					</div>
+				</td>
+				<td>
+					<!-- <span style="font-size: 30px;color:{{input.from.color}}">{{input.from.nameBM}}
+						{{profitGrid["F-" + input.from.nameBM].rate | number:3}} @
+						{{profitGrid["F-" + input.from.nameBM].B}} THB</span> -->
+					<!-- Buy Side Info -->
+					<table class="table-4" ng-if="input.from.orders.length > 0">
+						<tr>
+							<th>Rate</th>
+							<th>Volume</th>
+							<th>THB</th>
+							<th>Cancel</th>
+						</tr>
+						<tr ng-repeat="order in input.from.orders"
+							ng-class="{'cancel-order': order.side == 'SELL' ? ((order.rate / input.from.asksBM[0][0]) * (1-fee)) < fromSort[0].rate : ((order.rate / input.from.bidsBM[0][0]) * (1+fee)) > toSort[0].rate}">
+							<td style="color:{{(order.side == 'SELL'? 'RED':'GREEN')}}">{{order.rate}} |
+								{{order.side == "SELL" ? ((order.rate / input.from.asksBM[0][0]) * (1-fee)) : ((order.rate / input.from.bidsBM[0][0]) * (1+fee)) | number: 2}}
+							</td>
+							<td style="color:{{(order.side == 'SELL'? 'RED':'GREEN')}}">
+								{{order.side == "SELL" ? order.amount : order.amount / order.rate / 1.0025 | number: input.from.coinPrecision}}
+							</td>
+							<td style="color:{{(order.side == 'SELL'? 'RED':'GREEN')}}">
+								{{order.side == "SELL" ? order.amount * order.rate * 0.9975 : order.amount | number: 2}}
+							</td>
+							<td><button ng-click="CancelOrder(order, input.from)">Cancel</button></td>
+						</tr>
+					</table>
+					<div id="{{'msg-' + input.from.nameBM}}"
+						style="width: 450px;height: 200px;font-family: monospace;overflow-x: auto;font-size: 30px;">
+					</div>
+				</td>
+				<td>
+					<!-- Sell Side Bids -->
+					<div style="overflow-y: scroll; height:350px;">
+						<table class="table-orderbook" style="border-top: 7px lightgreen solid;">
+							<tr ng-repeat="bid in input.to.bidsBK.slice() track by $index"
+								style="color:#c9f8cb; background: linear-gradient(to left, #1d7221 {{(bid[1]/input.to.bidsMax)*100}}%, black 0%);"
+								ng-click="SellDepthClick(input.to.bidsBK, $index)">
+								<td style="color:lightgreen;" ng-show="input.showOrderRate">
+									<span>{{(bid[0] / input.to.bidsBM[0][0]) * (1 + fee) | number: 2}}</span>
+								</td>
+								<td style="color:red;" ng-show="input.showOrderRate">
+									<span> {{(bid[0] / input.to.asksBM[0][0]) * (1 - fee) | number: 2}}</span>
+								</td>
+								<td style="text-align: right; width: 100px;color:{{input.to.color}}">
+									{{bid[1] | number: input.to.coinPrecision}}
+								</td>
+								<td style="text-align: right; width: 100px;">
+									{{bid[0] | number: input.to.precisionBK}}
+								</td>
+								<td style="background-color: {{bid[3]? 'gold': ''}};">
+									.
+								</td>
+								<!-- <td style="text-align: right; width: 10px;color:white"
+									ng-style="{'background-color' : (bid[3] ? 'lightgreen':'') }">{{1 + $index}}</td> -->
+							</tr>
+						</table>
+					</div>
+				</td>
+				<td>
+					<!-- Sell Side Info -->
+					<!-- <span style="font-size: 30px;color:{{input.to.color}}">{{input.to.nameBM}}
+						{{profitGrid["T-" + input.to.nameBM].rate | number:3}} @
+						{{profitGrid["T-" + input.to.nameBM].S}} THB</span> -->
+					<!-- Buy Side Info -->
+					<table class="table-4" ng-if="input.to.orders.length > 0">
+						<tr>
+							<th>Rate</th>
+							<th>Amount</th>
+							<th>THB</th>
+							<th>Cancel</th>
+						</tr>
+						<tr ng-repeat="order in input.to.orders"
+							ng-class="{'cancel-order': order.side == 'SELL' ? ((order.rate / input.to.asksBM[0][0]) * (1-fee)) < fromSort[0].rate : ((order.rate / input.to.bidsBM[0][0]) * (1+fee)) > toSort[0].rate}">
+							<td style="color:{{(order.side == 'SELL'? 'RED':'GREEN')}}">{{order.rate}} |
+								{{order.side == "SELL" ? ((order.rate / input.to.asksBM[0][0]) * (1-fee)) : ((order.rate / input.to.bidsBM[0][0]) * (1+fee)) | number: 2}}
+							</td>
+							<td style="color:{{(order.side == 'SELL'? 'RED':'GREEN')}}">
+								{{order.side == "SELL" ? order.amount : order.amount / order.rate / 1.0025 | number: input.to.coinPrecision}}
+							</td>
+							<td style="color:{{(order.side == 'SELL'? 'RED':'GREEN')}}">
+								{{order.side == "SELL" ? order.amount * order.rate * 0.9975 : order.amount | number: 2}}
+							</td>
+							<td><button ng-click="CancelOrder(order, input.to)">Cancel</button></td>
+						</tr>
+					</table>
+					<div id="{{'msg-' + input.to.nameBM}}"
+						style="width: 450px;height: 200px;font-family: monospace;overflow-x: auto;font-size: 30px;">
+					</div>
+				</td>
+			</tr>
+		</table>
+		<table>
+			<tr>
+				<td>
+					<!-- Wallet -->
+					<table class="table-4" style="font-size: 25px;">
+						<tr>
+							<th>
+								Coin
+							</th>
+							<th>
+								Available
+							</th>
+							<th>
+								Reserved
+							</th>
+							<th>Total</th>
+							<th>Equivalent THB</th>
+						</tr>
+						<tr>
+							<td>THB</td>
+							<td>{{Balance['THB'].available}}</td>
+							<td>{{Balance['THB'].reserved}}</td>
+							<td>{{Balance['THB'].available + Balance['THB'].reserved}}</td>
+							<td style="color:white">{{totalWorth | number:0}}</td>
+						</tr>
+						<tr ng-click="GetFeeCredits()">
+							<td style="color:yellow">Fee Credits</td>
+							<td colspan="3" style="color:yellow">{{FeeCredit}}</td>
+						</tr>
+						<tr ng-repeat="coin in (data)">
+							<td style="color:{{coin.color}};">{{coin.nameBK.toUpperCase()}}</td>
+							<td style="color:{{coin.color}};">
+								{{Balance[coin.nameBK.toUpperCase()].available | number: coin.precisionBK}}</td>
+							<td style="color:{{coin.color}};">
+								{{Balance[coin.nameBK.toUpperCase()].reserved | number: coin.precisionBK}}</td>
+							<td style="color:{{coin.color}};">
+								{{Balance[coin.nameBK.toUpperCase()].available + Balance[coin.nameBK.toUpperCase()].reserved | number: coin.precisionBK}}
+							</td>
+							<td style="color:white; text-align: right;">
+								{{(Balance[coin.nameBK.toUpperCase()].available + Balance[coin.nameBK.toUpperCase()].reserved) * coin.bidsBK[0][0] | number: 0}}
+							</td>
+						</tr>
+					</table>
+				</td>
+				<td>
+					<!-- Depostis -->
+					<h1>Deposit</h1>
+					<table class="table-4" style="font-size: 25px;">
+						<tr>
+							<th>Time</th>
+							<th>Coin</th>
+							<th>Amount</th>
+							<th>Status</th>
+							<th>Confirmation</th>
+						</tr>
+						<tr ng-repeat="dep in depositsHistory">
+							<td style="color:{{dep.color}}">{{dep.timeStr}}</td>
+							<td style="color:{{dep.color}}">{{dep.currency}}</td>
+							<td style="color:{{dep.color}}">{{dep.amount}}</td>
+							<td style="color: {{(dep.status == 'complete' ? 'green':'red')}}">{{dep.status}}</td>
+							<td style="color:{{dep.color}}">{{dep.con}}</td>
+						</tr>
+					</table>
+				</td>
+				<td>
+					<!-- Withdrawals-withdrawalHistory -->
+					<h1>Withdraw</h1>
+					<table class="table-4" style="font-size: 25px;">
+						<tr>
+							<th>Time</th>
+							<th>Coin</th>
+							<th>Amount</th>
+							<th>Status</th>
+							<th>TxnId</th>
+						</tr>
+						<tr ng-repeat="dep in withdrawalHistory">
+							<td style="color:{{dep.color}}">{{dep.timeStr}}</td>
+							<td style="color:{{dep.color}}">{{dep.currency}}</td>
+							<td style="color:{{dep.color}}">{{dep.amount}}</td>
+							<td style="color: {{(dep.status == 'complete' ? 'green':'red')}}">{{dep.status}}</td>
+							<td style="color:{{dep.color}}">{{dep.txn_id}}</td>
+						</tr>
+					</table>
+				</td>
+			</tr>
+		</table>
+
+
+
+		<p>
+			Fee: <span style="color:lightblue;font-size: xx-large;">{{fee}}</span>
+			[Show B-Rate: <input type="checkbox" ng-model="input.showbrate" />]
+			[Show Trades: <input type="checkbox" ng-model="input.showtrades" />]
+			[Show Big: <input type="checkbox" ng-model="input.bigscreen" />]
+			[Off Beep: <input type="checkbox" ng-model="input.offbeep" />]
+		</p>
+		<button style="width:650px;font-size: 50px;" ng-click="GetBalance()">Balance</button>
+		<button style="width:650px;font-size: 50px;" ng-click="GetDepositsHistory()">Deposits</button>
+		<button style="width:650px;font-size: 50px;" ng-click="GetWithdrawalHistory()">Withdrawals</button>
+		<button style="width:650px;font-size: 50px;" ng-click="getBIdata()">BI Test</button>
+	</div>
+	</div>
+
+	<script>
+
+		(function () {
+			var cors_api_host = 'cors-anywhere.herokuapp.com';
+			var cors_api_url = 'https://' + cors_api_host + '/';
+			var slice = [].slice;
+			var origin = window.location.protocol + '//' + window.location.host;
+			var open = XMLHttpRequest.prototype.open;
+			XMLHttpRequest.prototype.open = function () {
+				var args = slice.call(arguments);
+				if (args[1].indexOf("api.binance.com") != -1)
+					return open.apply(this, args);
+				var targetOrigin = /^https?:\/\/([^\/]+)/i.exec(args[1]);
+				if (targetOrigin && targetOrigin[0].toLowerCase() !== origin &&
+					targetOrigin[1] !== cors_api_host) {
+					args[1] = cors_api_url + args[1];
+				}
+				return open.apply(this, args);
+			};
+		})();
+
+		var errorCodes = {
+			0: "No error",
+			1: "Invalid JSON payload",
+			2: "Missing X-BTK-APIKEY",
+			3: "Invalid API key",
+			4: "API pending for activation",
+			5: "IP not allowed",
+			6: "Missing / invalid signature",
+			7: "Missing timestamp",
+			8: "Invalid timestamp",
+			9: "Invalid user",
+			10: "Invalid parameter",
+			11: "Invalid symbol",
+			12: "Invalid amount",
+			13: "Invalid rate",
+			14: "Improper rate",
+			15: "Amount too low",
+			16: "Failed to get balance",
+			17: "Wallet is empty",
+			18: "Insufficient balance",
+			19: "Failed to insert order into db",
+			20: "Failed to deduct balance",
+			21: "Invalid order for cancellation",
+			22: "Invalid side",
+			23: "Failed to update order status",
+			24: "Invalid order for lookup (or cancelled)",
+			30: "Limit exceeds",
+			40: "Pending withdrawal exists",
+			41: "Invalid currency for withdrawal",
+			42: "Address is not in whitelist",
+			43: "Failed to deduct crypto",
+			44: "Failed to create withdrawal record",
+			45: "Nonce has to be numeric",
+			46: "Invalid nonce",
+			47: "Withdrawal limit exceeds",
+			48: "Invalid bank account",
+			49: "Bank limit exceeds",
+			50: "Pending withdrawal exists",
+			90: "Server error (please contact support)"
+		}
+
+		function beep() {
+			var snd = new Audio("data:audio/wav;base64,//uQRAAAAWMSLwUIYAAsYkXgoQwAEaYLWfkWgAI0wWs/ItAAAGDgYtAgAyN+QWaAAihwMWm4G8QQRDiMcCBcH3Cc+CDv/7xA4Tvh9Rz/y8QADBwMWgQAZG/ILNAARQ4GLTcDeIIIhxGOBAuD7hOfBB3/94gcJ3w+o5/5eIAIAAAVwWgQAVQ2ORaIQwEMAJiDg95G4nQL7mQVWI6GwRcfsZAcsKkJvxgxEjzFUgfHoSQ9Qq7KNwqHwuB13MA4a1q/DmBrHgPcmjiGoh//EwC5nGPEmS4RcfkVKOhJf+WOgoxJclFz3kgn//dBA+ya1GhurNn8zb//9NNutNuhz31f////9vt///z+IdAEAAAK4LQIAKobHItEIYCGAExBwe8jcToF9zIKrEdDYIuP2MgOWFSE34wYiR5iqQPj0JIeoVdlG4VD4XA67mAcNa1fhzA1jwHuTRxDUQ//iYBczjHiTJcIuPyKlHQkv/LHQUYkuSi57yQT//uggfZNajQ3Vmz+Zt//+mm3Wm3Q576v////+32///5/EOgAAADVghQAAAAA//uQZAUAB1WI0PZugAAAAAoQwAAAEk3nRd2qAAAAACiDgAAAAAAABCqEEQRLCgwpBGMlJkIz8jKhGvj4k6jzRnqasNKIeoh5gI7BJaC1A1AoNBjJgbyApVS4IDlZgDU5WUAxEKDNmmALHzZp0Fkz1FMTmGFl1FMEyodIavcCAUHDWrKAIA4aa2oCgILEBupZgHvAhEBcZ6joQBxS76AgccrFlczBvKLC0QI2cBoCFvfTDAo7eoOQInqDPBtvrDEZBNYN5xwNwxQRfw8ZQ5wQVLvO8OYU+mHvFLlDh05Mdg7BT6YrRPpCBznMB2r//xKJjyyOh+cImr2/4doscwD6neZjuZR4AgAABYAAAABy1xcdQtxYBYYZdifkUDgzzXaXn98Z0oi9ILU5mBjFANmRwlVJ3/6jYDAmxaiDG3/6xjQQCCKkRb/6kg/wW+kSJ5//rLobkLSiKmqP/0ikJuDaSaSf/6JiLYLEYnW/+kXg1WRVJL/9EmQ1YZIsv/6Qzwy5qk7/+tEU0nkls3/zIUMPKNX/6yZLf+kFgAfgGyLFAUwY//uQZAUABcd5UiNPVXAAAApAAAAAE0VZQKw9ISAAACgAAAAAVQIygIElVrFkBS+Jhi+EAuu+lKAkYUEIsmEAEoMeDmCETMvfSHTGkF5RWH7kz/ESHWPAq/kcCRhqBtMdokPdM7vil7RG98A2sc7zO6ZvTdM7pmOUAZTnJW+NXxqmd41dqJ6mLTXxrPpnV8avaIf5SvL7pndPvPpndJR9Kuu8fePvuiuhorgWjp7Mf/PRjxcFCPDkW31srioCExivv9lcwKEaHsf/7ow2Fl1T/9RkXgEhYElAoCLFtMArxwivDJJ+bR1HTKJdlEoTELCIqgEwVGSQ+hIm0NbK8WXcTEI0UPoa2NbG4y2K00JEWbZavJXkYaqo9CRHS55FcZTjKEk3NKoCYUnSQ0rWxrZbFKbKIhOKPZe1cJKzZSaQrIyULHDZmV5K4xySsDRKWOruanGtjLJXFEmwaIbDLX0hIPBUQPVFVkQkDoUNfSoDgQGKPekoxeGzA4DUvnn4bxzcZrtJyipKfPNy5w+9lnXwgqsiyHNeSVpemw4bWb9psYeq//uQZBoABQt4yMVxYAIAAAkQoAAAHvYpL5m6AAgAACXDAAAAD59jblTirQe9upFsmZbpMudy7Lz1X1DYsxOOSWpfPqNX2WqktK0DMvuGwlbNj44TleLPQ+Gsfb+GOWOKJoIrWb3cIMeeON6lz2umTqMXV8Mj30yWPpjoSa9ujK8SyeJP5y5mOW1D6hvLepeveEAEDo0mgCRClOEgANv3B9a6fikgUSu/DmAMATrGx7nng5p5iimPNZsfQLYB2sDLIkzRKZOHGAaUyDcpFBSLG9MCQALgAIgQs2YunOszLSAyQYPVC2YdGGeHD2dTdJk1pAHGAWDjnkcLKFymS3RQZTInzySoBwMG0QueC3gMsCEYxUqlrcxK6k1LQQcsmyYeQPdC2YfuGPASCBkcVMQQqpVJshui1tkXQJQV0OXGAZMXSOEEBRirXbVRQW7ugq7IM7rPWSZyDlM3IuNEkxzCOJ0ny2ThNkyRai1b6ev//3dzNGzNb//4uAvHT5sURcZCFcuKLhOFs8mLAAEAt4UWAAIABAAAAAB4qbHo0tIjVkUU//uQZAwABfSFz3ZqQAAAAAngwAAAE1HjMp2qAAAAACZDgAAAD5UkTE1UgZEUExqYynN1qZvqIOREEFmBcJQkwdxiFtw0qEOkGYfRDifBui9MQg4QAHAqWtAWHoCxu1Yf4VfWLPIM2mHDFsbQEVGwyqQoQcwnfHeIkNt9YnkiaS1oizycqJrx4KOQjahZxWbcZgztj2c49nKmkId44S71j0c8eV9yDK6uPRzx5X18eDvjvQ6yKo9ZSS6l//8elePK/Lf//IInrOF/FvDoADYAGBMGb7FtErm5MXMlmPAJQVgWta7Zx2go+8xJ0UiCb8LHHdftWyLJE0QIAIsI+UbXu67dZMjmgDGCGl1H+vpF4NSDckSIkk7Vd+sxEhBQMRU8j/12UIRhzSaUdQ+rQU5kGeFxm+hb1oh6pWWmv3uvmReDl0UnvtapVaIzo1jZbf/pD6ElLqSX+rUmOQNpJFa/r+sa4e/pBlAABoAAAAA3CUgShLdGIxsY7AUABPRrgCABdDuQ5GC7DqPQCgbbJUAoRSUj+NIEig0YfyWUho1VBBBA//uQZB4ABZx5zfMakeAAAAmwAAAAF5F3P0w9GtAAACfAAAAAwLhMDmAYWMgVEG1U0FIGCBgXBXAtfMH10000EEEEEECUBYln03TTTdNBDZopopYvrTTdNa325mImNg3TTPV9q3pmY0xoO6bv3r00y+IDGid/9aaaZTGMuj9mpu9Mpio1dXrr5HERTZSmqU36A3CumzN/9Robv/Xx4v9ijkSRSNLQhAWumap82WRSBUqXStV/YcS+XVLnSS+WLDroqArFkMEsAS+eWmrUzrO0oEmE40RlMZ5+ODIkAyKAGUwZ3mVKmcamcJnMW26MRPgUw6j+LkhyHGVGYjSUUKNpuJUQoOIAyDvEyG8S5yfK6dhZc0Tx1KI/gviKL6qvvFs1+bWtaz58uUNnryq6kt5RzOCkPWlVqVX2a/EEBUdU1KrXLf40GoiiFXK///qpoiDXrOgqDR38JB0bw7SoL+ZB9o1RCkQjQ2CBYZKd/+VJxZRRZlqSkKiws0WFxUyCwsKiMy7hUVFhIaCrNQsKkTIsLivwKKigsj8XYlwt/WKi2N4d//uQRCSAAjURNIHpMZBGYiaQPSYyAAABLAAAAAAAACWAAAAApUF/Mg+0aohSIRobBAsMlO//Kk4soosy1JSFRYWaLC4qZBYWFRGZdwqKiwkNBVmoWFSJkWFxX4FFRQWR+LsS4W/rFRb/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////VEFHAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAU291bmRib3kuZGUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMjAwNGh0dHA6Ly93d3cuc291bmRib3kuZGUAAAAAAAAAACU=");
+			snd.play();
+		}
+
+		function getRequestData(initData) {
+			initData.ts = (new Date().getTime() / 1000).toFixed(0);
+			var hash = CryptoJS.HmacSHA256(JSON.stringify(initData), "f534aee793d3179a8f8bf357c2d0921b");
+			initData.sig = CryptoJS.enc.Hex.stringify(hash);
+			return initData;
+		}
+
+		var fee = 0.00325;
+		var loopInterval = 2000;
+		var whaleTHBThreshold = 25000;
+		var coins = [
+			{ nameBM: "XRP", idBK: 10, nameBK: "xrp", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#599600", precisionBK: 2, precisionBM: 5, coinPrecision: 0, coinFee: fee },
+			{ nameBM: "BTC", idBK: 1, nameBK: "btc", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#ffffff", precisionBK: 2, precisionBM: 2, coinPrecision: 5, coinFee: fee },
+			{ nameBM: "ETH", idBK: 2, nameBK: "eth", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#ff0000", precisionBK: 2, precisionBM: 2, coinPrecision: 2, coinFee: fee },
+			{ nameBM: "LTC", idBK: 9, nameBK: "ltc", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#ffff00", precisionBK: 2, precisionBM: 2, coinPrecision: 2, coinFee: fee },
+			{ nameBM: "XLM", idBK: 29, nameBK: "xlm", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#deb887", precisionBK: 2, precisionBM: 5, coinPrecision: 0, coinFee: fee },
+			{ nameBM: "BCH", idBK: 6, nameBK: "bch", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#00ff00", precisionBK: 2, precisionBM: 2, coinPrecision: 2, coinFee: fee },
+			{ nameBM: "DOGE", idBK: 35, nameBK: "doge", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#00ffff", precisionBK: 4, precisionBM: 7, coinPrecision: 0, coinFee: fee },
+			{ nameBM: "BNB", idBK: 33, nameBK: "bnb", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#ff00ff", precisionBK: 2, precisionBM: 4, coinPrecision: 1, coinFee: fee },
+			{ nameBM: "ADA", idBK: 4, nameBK: "ada", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#f5bffc", precisionBK: 2, precisionBM: 5, coinPrecision: 0, coinFee: fee },
+			{ nameBM: "WAN", idBK: 3, nameBK: "wan", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#80ced6", precisionBK: 2, precisionBM: 5, coinPrecision: 0, coinFee: fee },
+			{ nameBM: "ZIL", idBK: 12, nameBK: "zil", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#ef7500", precisionBK: 4, precisionBM: 6, coinPrecision: 0, coinFee: fee },
+			{ nameBM: "LINK", idBK: 15, nameBK: "link", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#ff0083", precisionBK: 2, precisionBM: 4, coinPrecision: 1, coinFee: fee },
+			{ nameBM: "IOST", idBK: 17, nameBK: "iost", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#a79e84", precisionBK: 2, precisionBM: 6, coinPrecision: 0, coinFee: fee },
+			{ nameBM: "ZRX", idBK: 18, nameBK: "zrx", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#87bdd8", precisionBK: 2, precisionBM: 5, coinPrecision: 1, coinFee: fee },
+			{ nameBM: "BAND", idBK: 65, nameBK: "band", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#87bdd8", precisionBK: 2, precisionBM: 5, coinPrecision: 2, coinFee: fee },
+			{ nameBM: "DOT", idBK: 68, nameBK: "dot", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#87bdd8", precisionBK: 2, precisionBM: 5, coinPrecision: 2, coinFee: fee },
+			{ nameBM: "OMG", idBK: 5, nameBK: "omg", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#006400", precisionBK: 2, precisionBM: 5, coinPrecision: 2, coinFee: fee },
+			{ nameBM: "SNT", idBK: 13, nameBK: "snt", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#ffffff", precisionBK: 2, precisionBM: 8, coinPrecision: 0, coinFee: fee },
+			{ nameBM: "CVC", idBK: 14, nameBK: "cvc", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#b03060", precisionBK: 2, precisionBM: 5, coinPrecision: 0, coinFee: fee },
+			{ nameBM: "GNT", idBK: 16, nameBK: "gnt", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#ff0000", precisionBK: 2, precisionBM: 5, coinPrecision: 0, coinFee: fee },
+			{ nameBM: "KNC", idBK: 19, nameBK: "knc", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#ffff00", precisionBK: 2, precisionBM: 5, coinPrecision: 0, coinFee: fee },
+			{ nameBM: "MANA", idBK: 24, nameBK: "mana", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#00ff00", precisionBK: 2, precisionBM: 5, coinPrecision: 0, coinFee: fee },
+			{ nameBM: "EVX", idBK: 32, nameBK: "evx", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#ff00ff", precisionBK: 2, precisionBM: 8, coinPrecision: 0, coinFee: fee },
+			{ nameBM: "RDN", idBK: 21, nameBK: "rdn", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#f5bffc", precisionBK: 2, precisionBM: 8, coinPrecision: 0, coinFee: fee },
+			{ nameBM: "POWR", idBK: 34, nameBK: "pow", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#80ced6", precisionBK: 2, precisionBM: 8, coinPrecision: 0, coinFee: fee },
+			{ nameBM: "ENG", idBK: 20, nameBK: "eng", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#ff0083", precisionBK: 2, precisionBM: 8, coinPrecision: 0, coinFee: fee },
+			{ nameBM: "KSM", idBK: 67, nameBK: "ksm", asksBM: [[1, 1]], bidsBM: [[1, 1]], asksBK: [], bidsBK: [], color: "#90f54f", precisionBK: 2, precisionBM: 5, coinPrecision: 2, coinFee: fee },
+			{ nameBM: "USDT", idBK: 8, nameBK: "usdt", asksBM: [[0.99945, 1]], bidsBM: [[1.00055, 1]], asksBK: [], bidsBK: [], color: "#6495ed", precisionBK: 2, coinPrecision: 0, precisionBM: 0, coinFee: fee }];
+
+
+		var fee2 = 0.004;
+
+		var points = {};
+		var BMsocket = undefined;
+		var BMsocket2 = undefined;
+		var lastBMUpdate = new Date();
+		var lastBKUpdate = new Date();
+		var bitkubusdt = [{ nameBM: "USDT", nameBK: "usdt", asksBM: [], bidsBM: [], asksBK: [[1, 1]], bidsBK: [[1, 1]] }];
+
+		function perfectString(str, length) {
+			return (str + "").toString().padEnd(length).substring(0, length);
+		}
+
+		function GetProfitNew(from, to, rate, profitGrid) {
+			if (rate < 1)
+				return {};
+			try {
+				var totalAmount = 0, totalProfit = 0, profitLevel = [];
+				var tempBuyOrders = from.asksBK.map(function (m) {
+					return {
+						rate: parseFloat(m[0]), volume: parseFloat(m[1]),
+						crate: (parseFloat(m[0]) / parseFloat(from.bidsBM[0])) * (1 + fee),
+						amount: parseFloat(m[0]) * parseFloat(m[1])
+					};
+				});
+				var tempSellOrders = to.bidsBK.map(function (m) {
+					return {
+						rate: parseFloat(m[0]), volume: parseFloat(m[1]),
+						crate: (parseFloat(m[0]) / parseFloat(to.asksBM[0])) * (1 - fee),
+						amount: parseFloat(m[0]) * parseFloat(m[1])
+					};
+				});
+				var hasProfit = rate > 1;
+				do {
+					if (tempBuyOrders[0].amount > tempSellOrders[0].amount) {
+						var orderProfit = ((tempSellOrders[0].crate / tempBuyOrders[0].crate) - 1) * tempSellOrders[0].amount;
+						totalAmount += tempSellOrders[0].amount;
+						if (orderProfit <= 0) {
+							hasProfit = false;
+						}
+						else {
+							totalProfit += orderProfit;
+							profitLevel.push({ pRate: ((tempSellOrders[0].crate / tempBuyOrders[0].crate) - 1) * 10000, orderProfit: orderProfit, amount: tempSellOrders[0].amount, Bcrate: tempBuyOrders[0].crate, Scrate: tempSellOrders[0].crate, Brate: tempBuyOrders[0].rate, Srate: tempSellOrders[0].rate, totalProfit: totalProfit, totalAmount: totalAmount })
+						}
+						tempBuyOrders[0].amount = tempBuyOrders[0].amount - tempSellOrders[0].amount;
+						tempSellOrders.shift();
+					}
+					else if (tempBuyOrders[0].amount < tempSellOrders[0].amount) {
+						var orderProfit = ((tempSellOrders[0].crate / tempBuyOrders[0].crate) - 1) * tempBuyOrders[0].amount;
+						totalAmount += tempBuyOrders[0].amount;
+						if (orderProfit <= 0) {
+							hasProfit = false;
+						}
+						else {
+							totalProfit += orderProfit;
+							profitLevel.push({ pRate: ((tempSellOrders[0].crate / tempBuyOrders[0].crate) - 1) * 10000, orderProfit: orderProfit, amount: tempBuyOrders[0].amount, Bcrate: tempBuyOrders[0].crate, Scrate: tempSellOrders[0].crate, Brate: tempBuyOrders[0].rate, Srate: tempSellOrders[0].rate, totalProfit: totalProfit, totalAmount: totalAmount });
+						}
+						tempSellOrders[0].amount = tempSellOrders[0].amount - tempBuyOrders[0].amount;
+						tempBuyOrders.shift();
+					}
+					else //equal
+					{
+						totalAmount += tempBuyOrders[0].amount;
+						var orderProfit = ((tempSellOrders[0].crate / tempBuyOrders[0].crate) - 1) * tempBuyOrders[0].amount;
+						if (orderProfit <= 0) {
+							hasProfit = false;
+						}
+						else {
+							totalProfit += orderProfit;
+							profitLevel.push({ pRate: ((tempSellOrders[0].crate / tempBuyOrders[0].crate) - 1) * 10000, orderProfit: orderProfit, amount: tempSellOrders[0].amount, Bcrate: tempBuyOrders[0].crate, Scrate: tempSellOrders[0].crate, totalProfit: totalProfit, totalAmount: totalAmount });
+						}
+						tempBuyOrders.shift();
+						tempSellOrders.shift();
+					}
+				} while (hasProfit && tempBuyOrders.length > 0 && tempSellOrders.length > 0)
+
+				var simProfitLevel = [];
+				var preProfitRate = 0;
+				for (pl of profitLevel) {
+					if (pl.pRate.toFixed(0) == preProfitRate) {
+						simProfitLevel[simProfitLevel.length - 1].orderProfit += pl.orderProfit;
+						simProfitLevel[simProfitLevel.length - 1].amount += pl.amount;
+						simProfitLevel[simProfitLevel.length - 1].totalAmount = pl.totalAmount;
+						simProfitLevel[simProfitLevel.length - 1].totalProfit = pl.totalProfit;
+					}
+					else {
+						simProfitLevel.push(JSON.parse(JSON.stringify(pl)));
+					}
+					preProfitRate = pl.pRate.toFixed(0);
+				}
+
+				if (simProfitLevel.length < 1)
+					debugger;
+
+			} catch (e) {
+				console.log(e);
+			}
+			return { totalProfit: totalProfit, MaxTHB: totalAmount, finalcrate: (totalProfit / totalAmount) * 10000, multiplier: (totalAmount / 10000), profitLevel: simProfitLevel };
+		}
+
+		function startStreamingBitmaxAll(coinList) {
+			if (BMsocket) {
+				try {
+					BMsocket.close();
+				}
+				catch (e) {
+					console.log(e);
+				}
+			}
+			BMsocket = new WebSocket("wss://bitmax.io/3/api/pro/v1/stream");
+			BMsocket.onopen = function (e) {
+				BMsocket.send(JSON.stringify({ "op": "sub", "id": "abcd1234", "ch": "bbo:" + coinList }));
+				console.log("BM socket opened");
+			};
+			BMsocket.onmessage = function (event) {
+				var pData = JSON.parse(event.data);
+				if (pData.m == "bbo") {
+					lastBMUpdate = new Date();
+					var item = coins.find(function (f) { return f.nameBM == pData.symbol.split('/')[0]; });
+					item.asksBM = [pData.data.ask];
+					item.bidsBM = [pData.data.bid];
+				}
+				else if (pData.m == "ping") {
+					BMsocket.send(JSON.stringify({ "op": "pong" }));
+				}
+			};
+			BMsocket.onclose = function (event) {
+				if (event.wasClean) { console.log("Was Clean"); } else { console.log("Was Not Clean"); }
+			};
+
+			BMsocket.onerror = function (error) {
+				console.log(error);
+				document.getElementById("message").innerHTML += "Bitmax ERROR : " + JSON.stringify(error);
+			};
+		}
+		function startStreamingBitmaxAll2(coinList) {
+			if (BMsocket2) {
+				try {
+					BMsocket.close();
+				}
+				catch (e) {
+					console.log(e);
+				}
+			}
+			BMsocket2 = new WebSocket("wss://bitmax.io/3/api/pro/v1/stream");
+			BMsocket2.onopen = function (e) {
+				BMsocket2.send(JSON.stringify({ "op": "sub", "id": "abcd1234", "ch": "bbo:" + coinList }));
+				console.log("BM socket opened");
+			};
+			BMsocket2.onmessage = function (event) {
+				var pData = JSON.parse(event.data);
+				if (pData.m == "bbo") {
+					lastBMUpdate = new Date();
+					var item = coins.find(function (f) { return f.nameBM == pData.symbol.split('/')[0]; });
+					item.asksBM = [pData.data.ask];
+					item.bidsBM = [pData.data.bid];
+				}
+				else if (pData.m == "ping") {
+					BMsocket2.send(JSON.stringify({ "op": "pong" }));
+				}
+			};
+			BMsocket2.onclose = function (event) {
+				if (event.wasClean) { console.log("Was Clean"); } else { console.log("Was Not Clean"); }
+			};
+
+			BMsocket2.onerror = function (error) {
+				console.log(error);
+				document.getElementById("message").innerHTML += "Bitmax ERROR : " + JSON.stringify(error);
+			};
+		}
+
+		function startStreamingBitKub(coin, token) {
+			console.log("STREAM BK:", coin);
+			var socket = new WebSocket("wss://api.bitkub.com/websocket-api/" + coin.idBK);
+			coin.BKsocket = socket;
+			socket.onopen = function (e) {
+				if (token) {
+					$("#secondCell").addClass("bklive");
+				}
+				socket.send(JSON.stringify({
+					"auth": token
+				}));
+				//document.getElementById("message").innerHTML = coin.nameBM + " : open";
+			};
+			socket.onmessage = function (event) {
+
+				try {
+					var items = event.data.split(/\r?\n/);
+					lastBKUpdate = new Date();
+					for (var itemIndex in items) {
+						var resMes = JSON.parse(items[itemIndex]);
+						if (resMes.event == "bidschanged" && resMes.data.length > 1) {
+							coin.bidsBK = resMes.data.map(function (f) { return [f[1], f[2], f[4], f[5]]; });
+							coin.bidsMax = Math.max(...resMes.data.map(function (f) { return f[2] }));
+						}
+						else if (resMes.event == "askschanged" && resMes.data.length > 1) {
+							coin.asksBK = resMes.data.map(function (f) { return [f[1], f[2], f[4], f[5]]; });
+							coin.asksMax = Math.max(...resMes.data.map(function (f) { return f[2] }));
+						}
+						else if (resMes.event == "ticker") {
+							if (!coin.lastTicker)
+								coin.lastTicker = resMes.data;
+
+							if (coin.lastTicker.lowestAsk != resMes.data.lowestAsk) {
+								//$('#from-' + coin.nameBM).empty();
+								//$('#from-' + coin.nameBM).prepend('<p class="msg" style="color:green;margin:0;">' +
+								//perfectString(resMes.data.lowestAsk.toFixed(coin.precisionBK), 10) + '</p>');
+								coin.asksBK[0][0] = resMes.data.lowestAsk;
+
+							}
+
+							if (coin.lastTicker.highestBid != resMes.data.highestBid) {
+								//$('#to-' + coin.nameBM).empty();
+								//$('#to-' + coin.nameBM).prepend('<p class="msg" style="color:red;margin:0;">' +
+								//perfectString(resMes.data.highestBid.toFixed(coin.precisionBK), 10) + '</p>');
+								coin.bidsBK[0][0] = resMes.data.highestBid;
+							}
+
+							coin.lastTicker = resMes.data
+						}
+						else if (resMes.event == "tradeschanged") {
+
+							coin.bidsBK = resMes.data[1].map(function (f) { return [f[1], f[2], f[4], f[5]]; });
+							coin.bidsMax = Math.max(...resMes.data[1].map(function (f) { return f[2] }));
+
+							coin.asksBK = resMes.data[2].map(function (f) { return [f[1], f[2], f[4], f[5]]; });
+							coin.asksMax = Math.max(...resMes.data[2].map(function (f) { return f[2] }));
+
+							var newTrades = resMes.data[0].filter(function (f) { return f[6]; });
+							var myTrades = newTrades.filter(function (f) { return f[7] || f[8]; });
+							if (myTrades.length > 0)
+								beep();
+							for (trade of newTrades) {
+								$('#msg-' + coin.nameBM).prepend('<p class="msg" style="color:' + (trade[3] == "SELL" ? 'red' : 'green') + ';margin:0;">' +
+									trade[2].toFixed(coin.coinPrecision) + ' ' + coin.nameBM + ' @ ' +
+									trade[1].toFixed(coin.precisionBK) + '</p>');
+
+								if (trade[3] == "SELL") {
+									//$('#to-' + coin.nameBM).empty();
+									//$('#to-' + coin.nameBM).prepend('<p class="msg" style="color:red;margin:0;">' +
+									//perfectString(coin.bidsBK[0][0].toFixed(coin.precisionBK), 10) + '</p>');
+
+									$('#to-' + coin.nameBM + "name").empty();
+									$('#to-' + coin.nameBM + "name").prepend('<span class="msg">' + coin.nameBM + '</span>');
+
+								}
+								else {
+									//$('#from-' + coin.nameBM).empty();
+									//$('#from-' + coin.nameBM).prepend('<p class="msg" style="color:green;margin:0;">' +
+									//perfectString(coin.asksBK[0][0].toFixed(coin.precisionBK), 10) + '</p>');
+
+									$('#from-' + coin.nameBM + "name").empty();
+									$('#from-' + coin.nameBM + "name").prepend('<span class="msg">' + coin.nameBM + '</span>');
+								}
+							}
+							//coin.newTrades = newTrades;
+							coin.trades = resMes.data[0];
+							coin.tradesChanged = true;
+
+
+
+						}
+					}
+				}
+				catch (e) {
+					//console.log(e);
+				}
+			};
+
+			socket.onclose = function (event) {
+				//coin.closed = true;
+				//document.getElementById("message").innerHTML += coin.nameBM + " : closed";
+				if (event.wasClean) { console.log("Was Clean"); } else {
+					console.log("Was Not Clean", coin.nameBM);
+					coin.socketClosed = true;
+					$("#secondCell").removeClass("bklive");
+					// setTimeout(function () {
+					// 	startStreamingBitKub(coin);
+					// }, 1000);
+				}
+			};
+			socket.onerror = function (error) {
+				coin.closed = true;
+				console.log(error);
+				document.getElementById("message").innerHTML += coin.nameBM + " : " + JSON.stringify(error);
+			};
+		}
+		function calculateProfit(coins, olfProfitGrid) {
+
+			var profitGrid = {};
+			coins.forEach(to => {
+				try {
+					profitGrid["T-" + to.nameBM] = {
+						color: to.color,
+						rate: (parseFloat(to.bidsBK[0][0]) / parseFloat(to.asksBM[0][0])) * (1 - to.coinFee),
+						rateW: (parseFloat(to.asksBK[0][0]) / parseFloat(to.asksBM[0][0])) * (1 - to.coinFee),
+						B: parseFloat(to.asksBM[0][0]), S: parseFloat(to.bidsBK[0][0]),
+						upValue: to.bidsBK.filter(function (f) { return parseFloat(f[0]) > (to.bidsBK[0][0] * 0.9995); }).map(function (m) { return parseFloat(m[0]) * parseFloat(m[1]); }).reduce(function (a, b) { return a + b; })
+					};
+				} catch (e) {
+					//console.log(e);
+				}
+			});
+			coins.forEach(from => {
+				try {
+					profitGrid["F-" + from.nameBM] = {
+						color: from.color,
+						rate: (parseFloat(from.asksBK[0][0]) / parseFloat(from.bidsBM[0][0])) * (1 + from.coinFee),
+						rateW: (parseFloat(from.bidsBK[0][0]) / parseFloat(from.bidsBM[0][0])) * (1 + from.coinFee),
+						B: parseFloat(from.asksBK[0][0]), S: parseFloat(from.bidsBM[0][0]),
+						upValue: from.asksBK.filter(function (f) { return parseFloat(f[0]) < (from.asksBK[0][0] * 1.0005); }).map(function (m) { return parseFloat(m[0]) * parseFloat(m[1]); }).reduce(function (a, b) { return a + b; })
+					};
+				} catch (e) {
+					//console.log(e);
+				}
+
+				coins.forEach(to => {
+
+					try {
+						profitGrid[from.nameBM + "_" + to.nameBM] = {
+							rate: profitGrid["T-" + to.nameBM].rate / profitGrid["F-" + from.nameBM].rate,
+							rateFW: profitGrid["T-" + to.nameBM].rate / profitGrid["F-" + from.nameBM].rateW,
+							rateTW: profitGrid["T-" + to.nameBM].rateW / profitGrid["F-" + from.nameBM].rate,
+							totalProfit: GetProfitNew(from, to, profitGrid["T-" + to.nameBM].rate / profitGrid["F-" + from.nameBM].rate, profitGrid)
+						}
+					} catch (e) {
+						//console.log(e);
+					}
+				});
+			});
+			return profitGrid;
+			//console.log(profitGrid);
+		}
+
+
+
+
+		var app = angular.module('myApp', []);
+		app.controller('myCtrl', function ($scope, $http) {
+			$scope.input = { showbrate: false, matrixItem: undefined, from: undefined, to: undefined };
+			$scope.fee = fee;
+			$scope.totalWorth = 0;
+			$scope.usd = {};
+			$scope.buy = { thb: 0, price: 0, volume: 0 };
+			$scope.sell = { thb: 0, price: 0, volume: 0 };
+			$scope.Balance = [];
+			$scope.LiveOrders = [];
+			$scope.depositsHistory = [];
+			$scope.withdrawalHistory = [];
+			bitkubusdt[0].asksBK[0] = [1, "1"];
+			bitkubusdt[0].bidsBK[0] = [1, "1"];
+			coins.forEach(ele => {
+				ele.asksBK[0] = [1, "1"];
+				ele.bidsBK[0] = [1, "1"];
+			});
+
+			$scope.otherFromCoins = [""]
+			$scope.otherToCoins = [];
+
+			function refreshDepth(coin, index) {
+				$http.get("https://api.bitkub.com/api/market/depth?sym=THB_" + coin.toUpperCase() + "&lmt=30").then(function (d) {
+					try {
+						coins[index].asksBK = d.data.asks;
+						coins[index].bidsBK = d.data.bids;
+						coin.asksMax = Math.max(...d.data.asks.map(function (f) { return f[1] }));
+						coin.bidsMax = Math.max(...d.data.bids.map(function (f) { return f[1] }));
+						console.log(coin, d.data.asks.length)
+					}
+					catch (e) {
+						console.log(e);
+					}
+				});
+			}
+
+			$scope.refreshBitKub = function () {
+				var index = 0;
+				for (ele of coins) {
+					var name = ele.nameBK;
+					refreshDepth(ele.nameBK, coins.indexOf(ele));
+				}
+			}
+
+
+
+			$scope.BuyDepthClick = function (asks, index) {
+				$scope.buy.price = asks[index][0];
+				$scope.buy.volume = asks.slice(0, index + 1).map(function (f) { return f[1]; }).reduce(function (a, b) { return a + b; });
+				$scope.buy.thb = $scope.buy.volume * $scope.buy.price * 1.0025;
+			};
+
+			$scope.SellDepthClick = function (bids, index) {
+				$scope.sell.price = bids[index][0];
+				$scope.sell.volume = bids.slice(0, index + 1).map(function (f) { return f[1]; }).reduce(function (a, b) { return a + b; }) * 0.9975;
+				$scope.sell.thb = $scope.sell.volume * $scope.sell.price * 0.9975;
+			};
+
+			$scope.BuySideClick = function (item) {
+				$scope.input.from = $scope.data.find(function (f) { return f.nameBM == item.name; });
+				$scope.buy.price = $scope.input.from.asksBK[0][0];
+				$scope.buy.volume = $scope.input.from.asksBK[0][1];
+				$scope.buy.thb = $scope.buy.volume * $scope.buy.price * 1.0025;
+				setTimeout(function () {
+					document.getElementById('scroll-to-bottom1').scrollTop = 10000;
+					document.getElementById('scroll-to-bottom2').scrollTop = 10000;
+				}, 100)
+
+				$scope.GetOrders($scope.input.from);
+			};
+
+			$scope.SellSideClick = function (item) {
+				$scope.input.to = $scope.data.find(function (f) { return f.nameBM == item.name; });
+				$scope.sell.price = $scope.input.to.bidsBK[0][0];
+				$scope.sell.volume = $scope.input.to.bidsBK[0][1];
+				$scope.sell.thb = $scope.sell.volume * $scope.sell.price * 0.9975;
+
+				setTimeout(function () {
+					document.getElementById('scroll-to-bottom1').scrollTop = 10000;
+					document.getElementById('scroll-to-bottom2').scrollTop = 10000;
+				}, 100)
+				$scope.GetOrders($scope.input.to);
+			};
+
+			$scope.matrixSelect = function () {
+
+				$scope.buy.sym = $scope.input.from.nameBK;
+				$scope.sell.sym = $scope.input.to.nameBK;
+
+				$scope.GetOrders($scope.input.from);
+				if ($scope.input.from.nameBM != $scope.input.to.nameBM)
+					$scope.GetOrders($scope.input.to);
+
+				//buy
+				$scope.buy.price = $scope.input.from.asksBK[0][0];
+				$scope.buy.volume = $scope.input.from.asksBK[0][1];
+				$scope.buy.thb = $scope.buy.volume * $scope.buy.price * 1.0025;
+
+				//sell
+				$scope.sell.price = $scope.input.to.bidsBK[0][0];
+				$scope.sell.volume = $scope.input.to.bidsBK[0][1];
+				$scope.sell.thb = $scope.sell.volume * $scope.sell.price * 0.9975;
+
+
+				setTimeout(function () {
+					document.getElementById('scroll-to-bottom1').scrollTop = 10000;
+					document.getElementById('scroll-to-bottom2').scrollTop = 10000;
+				}, 100)
+			};
+
+			$scope.GetBalance = function () {
+				$http({
+					method: 'POST', url: 'https://api.bitkub.com/api/market/balances',
+					headers: { 'accept': 'application/json', 'content-type': 'application/json', 'x-btk-apikey': '4ae7c8427e0d13a8f7271b4ea7e8aa6e' },
+					data: getRequestData({})
+				}).then(function (data) {
+					$scope.Balance = data.data.result;
+					$.toast({ text: 'Order cancelled', icon: 'success', position: "top-left", stack: false });
+					if (data.data.error != 0)
+						$.toast({ text: errorCodes[data.data.error], icon: 'error', position: 'top-left', stack: false });
+					else
+						$scope.Balance = data.data.result;
+					$scope.totalWorth = data.data.result["THB"].available + data.data.result["THB"].reserved;
+					coins.forEach(function (coin) {
+						$scope.totalWorth += ($scope.Balance[coin.nameBK.toUpperCase()].available + $scope.Balance[coin.nameBK.toUpperCase()].reserved) * coin.bidsBK[0][0];
+					});
+				})
+			};
+
+			$scope.GetFeeCredits = function () {
+				$http({
+					method: 'POST', url: 'https://api.bitkub.com/api/user/trading-credits',
+					headers: { 'accept': 'application/json', 'content-type': 'application/json', 'x-btk-apikey': '4ae7c8427e0d13a8f7271b4ea7e8aa6e' },
+					data: getRequestData({})
+				}).then(function (data) {
+					if (data.data.error != 0)
+						$.toast({ text: errorCodes[data.data.error], icon: 'error', position: 'top-left', stack: false });
+					else {
+						$scope.FeeCredit = data.data.result;
+					}
+				})
+			};
+
+			$scope.GetOrders = function (coin) {
+				$http({
+					method: 'POST', url: 'https://api.bitkub.com/api/market/my-open-orders',
+					headers: { 'accept': 'application/json', 'content-type': 'application/json', 'x-btk-apikey': '4ae7c8427e0d13a8f7271b4ea7e8aa6e' },
+					data: getRequestData({ sym: "THB_" + coin.nameBK.toUpperCase() })
+				}).then(function (data) {
+					if (data.data.error != 0)
+						$.toast({ text: errorCodes[data.data.error], icon: 'error', position: 'top-left', stack: false });
+					else {
+						coin.orders = data.data.result;
+						coin.orders.forEach(function (ele) {
+							var found = $scope.LiveOrders.find(function (f) { return f.hash == ele.hash });
+							if (!found) {
+								$scope.LiveOrders.push({ time: new Date(), coin: coin, amt: ele.amount, rec: ele.receive, price: ele.rate, side: ele.side.toLowerCase(), hash: ele.hash, status: "unfilled" });
+							}
+						});
+					}
+				})
+			};
+
+			$scope.GetWithdrawalHistory = function () {
+				$http({
+					method: 'POST', url: 'https://api.bitkub.com/api/crypto/withdraw-history',
+					headers: { 'accept': 'application/json', 'content-type': 'application/json', 'x-btk-apikey': '4ae7c8427e0d13a8f7271b4ea7e8aa6e' },
+					data: getRequestData({})
+				}).then(function (data) {
+					debugger;
+					if (data.data.error != 0)
+						$.toast({ text: errorCodes[data.data.error], icon: 'error', position: 'top-left', stack: false });
+					else {
+						$.toast({ text: "Deposits Refresh", icon: 'success', position: 'top-left', stack: false });
+						$scope.withdrawalHistory = data.data.result;
+						var confirmations = { "BTC": 3, "ETH": 25, "WAN": 30, "ADA": 15, "OMG": 25, "BCH": 3, "USDT": 2, "LTC": 4, "XRP": 1, "BSV": 20, "ZIL": 1, "SNT": 25, "CVC": 25, "LINK": 25, "GNT": 25, "IOST": 25, "ZRX": 25, "KNC": 25, "ENG": 25, "RDN": 25, "ABT": 25, "MANA": 25, "INF": 25, "CTXC": 25, "XLM": 1, "SIX": 1, "JFIN": 25, "EVX": 25, "BNB": 1, "POW": 25, "DOGE": 2, "DAI": 25 }
+						$scope.withdrawalHistory.forEach(function (f) {
+							f.timeStr = new Date(f.time * 1000).toLocaleString()
+							var found = coins.find(function (f2) { return f2.nameBK.toUpperCase() == f.currency; });
+							if (found) {
+								f.color = found.color;
+							}
+						});
+					}
+				})
+			};
+
+			$scope.GetDepositsHistory = function () {
+				$http({
+					method: 'POST', url: 'https://api.bitkub.com/api/crypto/deposit-history',
+					headers: { 'accept': 'application/json', 'content-type': 'application/json', 'x-btk-apikey': '4ae7c8427e0d13a8f7271b4ea7e8aa6e' },
+					data: getRequestData({})
+				}).then(function (data) {
+					if (data.data.error != 0)
+						$.toast({ text: errorCodes[data.data.error], icon: 'error', position: 'top-left', stack: false });
+					else {
+						$.toast({ text: "Deposits Refresh", icon: 'success', position: 'top-left', stack: false });
+						$scope.depositsHistory = data.data.result;
+						var confirmations = { "BTC": 3, "ETH": 25, "WAN": 30, "ADA": 15, "OMG": 25, "BCH": 3, "USDT": 2, "LTC": 4, "XRP": 1, "BSV": 20, "ZIL": 1, "SNT": 25, "CVC": 25, "LINK": 25, "GNT": 25, "IOST": 25, "ZRX": 25, "KNC": 25, "ENG": 25, "RDN": 25, "ABT": 25, "MANA": 25, "INF": 25, "CTXC": 25, "XLM": 1, "SIX": 1, "JFIN": 25, "EVX": 25, "BNB": 1, "POW": 25, "DOGE": 2, "DAI": 25 }
+						$scope.depositsHistory.forEach(function (f) {
+							f.timeStr = new Date(f.time * 1000).toLocaleString()
+							f.con = f.confirmations + "/" + confirmations[f.currency];
+							var found = coins.find(function (f2) { return f2.nameBK.toUpperCase() == f.currency; });
+							if (found) {
+								f.color = found.color;
+							}
+						});
+					}
+				})
+			};
+
+			$scope.CancelOrder = function (order, coin) {
+				$http({
+					method: 'POST', url: 'https://api.bitkub.com/api/market/cancel-order',
+					headers: { 'accept': 'application/json', 'content-type': 'application/json', 'x-btk-apikey': '4ae7c8427e0d13a8f7271b4ea7e8aa6e' },
+					data: getRequestData({ hash: order.hash })
+				}).then(function (data) {
+					if (data.data.error != 0)
+						$.toast({ text: errorCodes[data.data.error], icon: 'error', position: 'top-left', stack: false });
+					else {
+						$.toast({ text: 'Order cancelled', icon: 'success', position: 'top-left', stack: false });
+						$scope.GetOrders(coin);
+					}
+					$scope.GetBalance();
+				})
+			};
+
+			$scope.UpdateOrder = function (order) {
+				$http({
+					method: 'POST', url: 'https://api.bitkub.com/api/market/my-order-history',
+					headers: { 'accept': 'application/json', 'content-type': 'application/json', 'x-btk-apikey': '4ae7c8427e0d13a8f7271b4ea7e8aa6e' },
+					data: getRequestData({ sym: 'THB_' + order.coin.nameBK.toUpperCase(), 'lmt': 100 })
+				}).then(function (data) {
+					if (data.data.error != 0)
+						$.toast({ text: errorCodes[data.data.error], icon: 'error', position: 'top-left', stack: false });
+					else {
+						var currentHashTrade = data.data.result.filter(function (f) { return f.hash == order.hash || f.parent_order_hash == order.hash });
+						order.filledAmount = currentHashTrade.length > 0 ? currentHashTrade.map(function (m) { return m.amount; }).reduce(function (a, b) { return a + b; }) : 0;
+						//$.toast({ text: 'Order cancelled', icon: 'success', position: 'top-left', stack: false });
+						//$scope.GetOrders(coin);
+					}
+					console.log(data);
+					//$scope.GetBalance();
+				})
+			};
+
+			$scope.UpdatedLiveOrders = function () {
+				coins.forEach(function (coin) {
+					if (coin.tradesChanged) {
+						var foundOrders = $scope.LiveOrders.filter(function (f) { return f.coin.nameBK == coin.nameBK && ((f.filledAmount || 0) / f.amt) < 0.99999 });
+						foundOrders.forEach(function (ele) {
+							$scope.UpdateOrder(ele);
+						});
+						coin.tradesChanged = false;
+					}
+				});
+			}
+
+			$scope.CloseLiveOrder = function (order) {
+				$scope.LiveOrders = $scope.LiveOrders.filter(function (f) { return f.hash != order.hash; });
+			}
+
+			$scope.BuyOrder = function (coin) {
+				var r = $scope.input.noPrompt ? true : confirm("BUY " + parseFloat($scope.buy.volume.toFixed(8)) + "" + coin.nameBM + " @ " + $scope.buy.price.toFixed(coin.precisionBK) + " THB => " + $scope.buy.thb.toFixed(0) + " THB");
+				if (r == true) {
+
+					$http({
+						method: 'POST', url: 'https://api.bitkub.com/api/market/place-bid',
+						headers: { 'accept': 'application/json', 'content-type': 'application/json', 'x-btk-apikey': '4ae7c8427e0d13a8f7271b4ea7e8aa6e' },
+						data: getRequestData({ sym: "THB_" + coin.nameBK.toUpperCase(), amt: parseFloat($scope.buy.thb), rat: parseFloat($scope.buy.price), typ: 'limit' })
+					}).then(function (data) {
+						if (data.data.error != 0)
+							$.toast({ text: errorCodes[data.data.error], icon: 'error', position: 'top-left', stack: false });
+						else {
+							$.toast({ heading: 'Buy order placed', icon: 'success', position: 'top-left', stack: false });
+							$scope.GetOrders(coin);
+							$scope.GetBalance();
+							console.log("BUY", data.data);
+							$scope.LiveOrders.push({ time: new Date(), coin: coin, amt: data.data.result.amt, rec: data.data.result.rec, price: data.data.result.rat, side: 'buy', hash: data.data.result.hash, status: "unfilled" });
+						}
+					})
+					$scope.buy.thb = 0;
+				}
+			}
+
+			$scope.SellOrder = function (coin) {
+				var r = $scope.input.noPrompt ? true : confirm("SELL " + parseFloat($scope.sell.volume.toFixed(8)) + "" + coin.nameBM + " @ " + $scope.sell.price.toFixed(coin.precisionBK) + " THB => " + $scope.sell.thb.toFixed(0) + " THB");
+				if (r == true) {
+					$http({
+						method: 'POST', url: 'https://api.bitkub.com/api/market/place-ask',
+						headers: { 'accept': 'application/json', 'content-type': 'application/json', 'x-btk-apikey': '4ae7c8427e0d13a8f7271b4ea7e8aa6e' },
+						data: getRequestData({ sym: "THB_" + coin.nameBK.toUpperCase(), amt: parseFloat($scope.sell.volume), rat: parseFloat($scope.sell.price), typ: 'limit' })
+					}).then(function (data) {
+						if (data.data.error != 0)
+							$.toast({ text: errorCodes[data.data.error], icon: 'error', position: 'top-left', stack: false });
+						else {
+							$.toast({ text: 'Sell order placed', icon: 'success', position: 'top-left', stack: false });
+							$scope.GetOrders(coin);
+							$scope.GetBalance();
+							console.log("SELL", data.data);
+							$scope.LiveOrders.push({ time: new Date(), coin: coin, amt: data.data.result.amt, rec: data.data.result.rec, price: data.data.result.rat, side: 'sell', hash: data.data.result.hash, status: "unfilled" });
+						}
+					})
+					$scope.sell.volume = 0;
+				}
+			}
+			$scope.connectLiveOrderBook = function () {
+				$http({
+					method: 'POST', url: 'https://api.bitkub.com/api/market/wstoken',
+					headers: { 'accept': 'application/json', 'content-type': 'application/json', 'x-btk-apikey': '4ae7c8427e0d13a8f7271b4ea7e8aa6e' },
+					data: getRequestData({})
+				}).then(function (data) {
+					$.toast({ text: JSON.stringify(data.data), icon: 'success', position: 'top-left', stack: false });
+					console.log(data);
+					coins.forEach(function (ele) {
+						ele.BKsocket.close();
+						startStreamingBitKub(ele, data.data.result);
+					});
+				});
+			}
+
+			//$scope.GetBalance();
+
+			$scope.GetHistory = function () {
+				$http({
+					method: 'POST', url: 'https://api.bitkub.com/api/market/my-order-history',
+					headers: { 'accept': 'application/json', 'content-type': 'application/json', 'x-btk-apikey': '4ae7c8427e0d13a8f7271b4ea7e8aa6e' },
+					data: getRequestData({ sym: 'THB_USDT', 'lmt': 100 })
+				}).then(function (data) {
+					if (data.data.error != 0)
+						$.toast(errorCodes[data.data.error]);
+
+					console.log(JSON.stringify(data.data.result));
+				})
+			};
+
+			$scope.GetAllOrders = function (coin) {
+				$http({
+					method: 'POST', url: 'https://api.bitkub.com/api/market/my-open-orders',
+					headers: { 'accept': 'application/json', 'content-type': 'application/json', 'x-btk-apikey': '4ae7c8427e0d13a8f7271b4ea7e8aa6e' },
+					data: getRequestData({})
+				}).then(function (data) {
+					if (data.data.error != 0)
+						$.toast({ text: errorCodes[data.data.error], icon: 'error', position: 'top-left', stack: false });
+					else {
+						//$.toast({ text: errorCodes[data.data.error], icon: 'error', position: 'top-left', stack: false });
+						//coin.orders = data.data.result;
+						console.log(data.data);
+					}
+				})
+			};
+
+			$scope.getBIdata = function () {
+				var querystring = "symbol=BTCUSDT&recvWindow=4000&limit=1000&timestamp="+new Date().getTime();
+				var hash = CryptoJS.HmacSHA256(querystring, "hdiDDOkUo0dtMN2WSMkeCC0P7EQTPFo0USuXZhzun9oHl9HJ4DZT92EYq58CBxWT");
+				var signature = CryptoJS.enc.Hex.stringify(hash);
+				querystring+= "&signature="+ signature;
+				$http({
+					method: 'POST', url: 'https://api.binance.com/api/v3/allOrders',
+					headers: { 'X-MBX-APIKEY': 'eaVgOezMuApl6hU4YCStRFkCSEMfA87QMPswQ1ObX9qW0xrHJ8kpsWr9U5QlN3bu', 
+					'Content-type':'application/x-www-form-urlencoded'
+				},
+					data : querystring
+				}).then(function (data) {
+					console.log(data)
+				},function(error){
+console.log("error",error);
+
+				})
+			}
+
+			$scope.refreshBI = function () {
+				$http.get("https://api.binance.com/api/v3/ticker/bookTicker").then(function (d) {
+					lastBMUpdate = new Date();
+					try {
+						var btcPrice = d.data.find(function (f) { return f.symbol == "BTCUSDT"; });
+						coins.forEach(function (coin) {
+							var usdtPair = d.data.find(function (f) { return f.symbol == coin.nameBM + "USDT"; });
+							if (usdtPair) {
+								coin.asksBM = [[usdtPair.askPrice, usdtPair.askQty]];
+								coin.bidsBM = [[usdtPair.bidPrice, usdtPair.bidQty]];
+							}
+							else {
+
+								var btcPair = d.data.find(function (f) { return f.symbol == coin.nameBM + "BTC"; });
+								if (btcPair) {
+									coin.asksBM = [[btcPair.askPrice * btcPrice.askPrice * 1.00075, btcPair.askQty]];
+									coin.btcAskPrice = btcPair.askPrice;
+									coin.bidsBM = [[btcPair.bidPrice * btcPrice.bidPrice * 0.99925, btcPair.bidQty]];
+									coin.btcBidPrice = btcPair.bidPrice;
+								}
+							}
+						});
+					}
+					catch (e) {
+						console.log(e);
+					}
+				});
+			}
+
+			// var streamCoinList = coins.filter(function (f) { return f.nameBM != "USDT"; });
+			// startStreamingBitmaxAll(streamCoinList.slice(0, 10).map(function (m) { return m.nameBM + "/USDT"; }).join());
+			// if (streamCoinList.length > 10)
+			// 	startStreamingBitmaxAll2(streamCoinList.slice(10, 20).map(function (m) { return m.nameBM + "/USDT"; }).join());
+
+			$scope.refreshBitKub();
+			coins.forEach(function (ele) {
+				startStreamingBitKub(ele, "");
+			});
+			$scope.refreshBI();
+
+			setInterval(function () {
+				$scope.refreshBI();
+				$scope.data = coins;
+				$scope.lastBMUpdate = (new Date() - lastBMUpdate) / 1000;
+				$scope.lastBKUpdate = (new Date() - lastBKUpdate) / 1000;
+				var pg = calculateProfit(coins, $scope.profitGrid);
+				$scope.profitGrid = pg;
+				$scope.bitkubusdt = bitkubusdt;
+				$scope.fromSort = _.sortBy(coins.map(function (m) {
+					try {
+						return {
+							color: m.color, precisionBK: m.precisionBK, precisionBM: m.precisionBM, name: m.nameBM, rate: $scope.profitGrid["F-" + m.nameBM].rate,
+							rateW: $scope.profitGrid["F-" + m.nameBM].rateW, B: $scope.profitGrid["F-" + m.nameBM].B, S: $scope.profitGrid["F-" + m.nameBM].S, socketClosed: m.socketClosed,
+							upValue: $scope.profitGrid["F-" + m.nameBM].upValue, btcAskPrice: m.btcAskPrice, btcBidPrice: m.btcBidPrice
+						}
+					} catch (e) { };
+				})
+					.filter(function (f) { return f && f.rate > 20 && f.rate < 60 }),
+					function (s) { return s.rate });
+				$scope.toSort = _.sortBy(coins.map(function (m) {
+					try {
+						return {
+							color: m.color, precisionBK: m.precisionBK, precisionBM: m.precisionBM, name: m.nameBM, rate: $scope.profitGrid["T-" + m.nameBM].rate,
+							rateW: $scope.profitGrid["T-" + m.nameBM].rateW, B: $scope.profitGrid["T-" + m.nameBM].B, S: $scope.profitGrid["T-" + m.nameBM].S, socketClosed: m.socketClosed,
+							upValue: $scope.profitGrid["T-" + m.nameBM].upValue, btcAskPrice: m.btcAskPrice, btcBidPrice: m.btcBidPrice
+						}
+					} catch (e) { };
+				})
+					.filter(function (f) { return f && f.rate > 20 && f.rate < 60 }),
+					function (s) { return s.rate }).reverse();
+				var maxProfit = Math.max(...Object.keys(pg).map(function (f) { return pg[f].totalProfit ? pg[f].totalProfit.totalProfit : 0; }).filter(function (f) { return f; }));
+				maxProfit = maxProfit > 100000 | maxProfit < 0 ? 0 : maxProfit;
+				var prate = ($scope.toSort[0].rate / $scope.fromSort[0].rate - 1) * 10000;
+				var levels = [10, 30, 100, 400];
+				if (!$scope.input.offbeep) {
+					if (maxProfit < levels[0]) {
+						//nothing
+					}
+					else if (maxProfit >= levels[0] && maxProfit <= levels[1]) {
+						beep();
+					}
+					else if (maxProfit <= levels[2]) {
+						beep();
+						setTimeout(() => { beep() }, 100);
+					}
+					else if (maxProfit <= levels[3]) {
+						beep();
+						setTimeout(() => { beep() }, 100);
+						setTimeout(() => { beep() }, 200);
+					}
+					else if (maxProfit <= levels[4]) {
+						beep();
+						setTimeout(() => { beep() }, 100);
+						setTimeout(() => { beep() }, 200);
+						setTimeout(() => { beep() }, 300);
+					}
+				}
+
+				//$scope.UpdatedLiveOrders();
+
+
+				coins.forEach(function (coin) {
+					//whales logic
+					var newCoinBuyTrades = coin.trades.filter(function (f) { return f[3] == "BUY" && new Date(f[0] * 1000 + loopInterval) > new Date(); });
+					var newCoinSellTrades = coin.trades.filter(function (f) { return f[3] == "SELL" && new Date(f[0] * 1000 + loopInterval) > new Date(); });
+					if (newCoinBuyTrades.length > 0) {
+						var totalBuyTHB = newCoinBuyTrades.map(function (m) { return m[1] * m[2]; }).reduce(function (a, b) { return a + b });
+						if (totalBuyTHB > whaleTHBThreshold) {
+							var nodehtml = '<p class="msg" style="margin:0;background-color:#083d08;color:' + coin.color + '"><span>' + new Date().toLocaleTimeString().substring(0, 8) + ' ' + coin.nameBM.padEnd(4, '-') + ' </span><span style="color:green">BUY (' + newCoinBuyTrades.length + ') </span><span >' + totalBuyTHB.toFixed(0) + '</span></p>';
+							$("#all-trades").prepend(nodehtml);
+						}
+					}
+
+					if (newCoinSellTrades.length > 0) {
+						var totalSellTHB = newCoinSellTrades.map(function (m) { return m[1] * m[2]; }).reduce(function (a, b) { return a + b });
+						if (totalSellTHB > whaleTHBThreshold) {
+							var nodehtml = '<p class="msg" style="margin:0;background-color:#500b0b ;color:' + coin.color + '"><span>' + new Date().toLocaleTimeString().substring(0, 8) + ' ' + coin.nameBM.padEnd(4, '-') + ' </span><span style="color:red">SEL (' + newCoinSellTrades.length + ') </span><span >' + totalSellTHB.toFixed(0) + '</span></p>';
+							$("#all-trades").prepend(nodehtml);
+						}
+					}
+
+				});
+
+
+				$scope.$apply();
+			}, 2000);
+
+
+
+			$scope.data = [];
+
+			setTimeout(function () {
+				$scope.refreshBitKub();
+			}, 60000);
+		});
+
+	</script>
+	<style>
+		html {
+			background-color: black;
+			color: white;
+			font-family: monospace;
+		}
+
+		.profit {
+			color: #0fff00 !important;
+			background-color: #115f00 !important;
+			font-size: xx-large;
+		}
+
+		.profitside {
+			font-weight: bolder;
+		}
+
+		.closed {
+			background-color: gray !important;
+		}
+
+		.selected {
+			background-color: #ff000033 !important;
+		}
+
+		.profitw {
+			color: #055600 !important;
+			background-color: #170e00 !important;
+			font-size: x-large;
+		}
+
+		.table-3 tr td {
+			padding: 4px;
+			vertical-align: text-top;
+			padding: 1px;
+			font-family: monospace;
+		}
+
+		.table-3 tr th {
+			text-align: center;
+			font-weight: bolder !important;
+			padding: 1px;
+			font-family: monospace;
+		}
+
+		.table-3 {
+			border: solid 1px #DDEEEE;
+			border-collapse: collapse;
+			border-spacing: 0;
+			font: normal 14px Arial, sans-serif;
+			font-family: monospace;
+		}
+
+		.table-3 th {
+			background-color: #001a26;
+			border: solid 1px #679292;
+			color: #83cadb;
+			;
+			padding: 10px;
+			text-align: left;
+			text-shadow: 1px 1px 1px #000;
+			font-family: monospace;
+
+		}
+
+		.table-3 td {
+			border: solid 1px #679292;
+			color: #c0c0c0;
+			padding: 10px;
+			font-family: monospace;
+		}
+
+		.table-4 th {
+			background-color: #001a26;
+			border: solid 1px #679292;
+			color: #83cadb;
+			padding: 1px;
+			text-align: left;
+			text-shadow: 1px 1px 1px #000;
+			font-family: monospace;
+
+		}
+
+		.table-4 td {
+			border: solid 1px #679292;
+			color: #c0c0c0;
+			padding: 1px !important;
+			font-family: monospace;
+		}
+
+		.table-4 {
+			border: solid 1px #DDEEEE;
+			border-collapse: collapse;
+			border-spacing: 0;
+			font: normal 28px Arial, sans-serif;
+			font-family: monospace;
+			font-weight: bold;
+		}
+
+		.table-5 th {
+			background-color: #001a26;
+			border: solid 1px #679292;
+			color: #83cadb;
+			padding: 2px;
+			text-align: left;
+			text-shadow: 1px 1px 1px #000;
+			font-family: monospace;
+
+		}
+
+		.table-5 td {
+			border: solid 1px #679292;
+			color: #c0c0c0;
+			padding: 3px !important;
+			font-family: monospace;
+		}
+
+		.table-5 {
+			border: solid 1px #DDEEEE;
+			border-collapse: collapse;
+			border-spacing: 0;
+			font: normal 30px Arial, sans-serif;
+			font-family: monospace;
+			font-weight: bold;
+		}
+
+
+		.table-orderbook td {
+			padding: 3px 5px;
+		}
+
+		.support-table {
+			border: none !important;
+		}
+
+		.cancel-order {
+			background-color: yellow;
+		}
+
+
+		.msg {
+			animation-name: new-msg;
+			animation-duration: 6s;
+		}
+
+		.confirm-checkbox {
+			width: 30px;
+			height: 30px;
+		}
+
+		.trade-coin-balance {
+			font-size: 50px;
+			;
+		}
+
+		.bklive {
+			background-color: #0fff00 !important;
+		}
+
+		@keyframes new-msg {
+			from {
+				background-color: yellow;
+			}
+
+			to {
+				background-color: black;
+			}
+		}
+
+		input[type=number],
+		select {
+			width: 100%;
+			padding: 1px 2px;
+			margin: 8px 0;
+			display: inline-block;
+			border: 1px solid #ccc;
+			border-radius: 4px;
+			box-sizing: border-box;
+			font-size: 40px;
+		}
+
+		button {
+			width: 100%;
+			background-color: #420000;
+			color: white;
+			padding: 1px 1px;
+			margin: 3px 0;
+			border: none;
+			border-radius: 4px;
+			cursor: pointer;
+			font-size: 40px;
+		}
+	</style>
+</body>
+
+</html>
